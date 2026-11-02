@@ -111,14 +111,14 @@ export default async function WatchPage({
               </div>
 
               <div className="flex flex-wrap gap-2">
-                <span className="rounded-full bg-white/[0.05] px-3 py-1 text-[11px] font-medium text-muted-foreground ring-1 ring-white/10">
+                <span className="rounded-full bg-white/5 px-3 py-1 text-[11px] font-medium text-muted-foreground ring-1 ring-white/10">
                   {video.source === "upload" ? "Fresh upload" : categoryName}
                 </span>
                 {video.tags.slice(0, 3).map((tag, index) => (
                   <Link
                     key={index}
                     href={`/?tag=${encodeURIComponent(tag)}`}
-                    className="rounded-full bg-white/[0.05] px-3 py-1 text-[11px] font-medium text-muted-foreground ring-1 ring-white/10 transition-colors hover:text-foreground"
+                    className="rounded-full bg-white/5 px-3 py-1 text-[11px] font-medium text-muted-foreground ring-1 ring-white/10 transition-colors hover:text-foreground"
                   >
                     #{tag}
                   </Link>
@@ -132,7 +132,7 @@ export default async function WatchPage({
                   <Link
                     key={tag}
                     href={`/?tag=${encodeURIComponent(tag)}`}
-                    className="rounded bg-white/[0.05] px-2 py-1 text-[11px] font-medium text-primary/90 transition-colors hover:bg-white/[0.09] hover:text-primary"
+                    className="rounded bg-white/5 px-2 py-1 text-[11px] font-medium text-primary/90 transition-colors hover:bg-white/[0.09] hover:text-primary"
                   >
                     #{tag}
                   </Link>
