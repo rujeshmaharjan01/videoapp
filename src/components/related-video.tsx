@@ -2,12 +2,7 @@ import { Eye, Play } from "lucide-react";
 import Link from "next/link";
 
 import { CategoryIcon } from "@/components/category-icon";
-import {
-  formatDuration,
-  formatViews,
-  timeAgo,
-  type Video,
-} from "@/lib/catalog";
+import { formatViews, timeAgo, type Video } from "@/lib/catalog";
 
 export function RelatedVideo({ video }: { video: Video }) {
   return (
@@ -25,7 +20,7 @@ export function RelatedVideo({ video }: { video: Video }) {
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(255,255,255,0.2),transparent_50%)]" />
         <CategoryIcon
           category={video.category}
-          className="absolute -bottom-4 -right-3 size-20 text-white/[0.08]"
+          className="absolute -bottom-4 -right-3 size-20 text-white/8"
           strokeWidth={1}
         />
         <span className="absolute inset-0 grid place-items-center opacity-0 transition-opacity group-hover:opacity-100">
@@ -33,11 +28,6 @@ export function RelatedVideo({ video }: { video: Video }) {
             <Play className="size-3.5 translate-x-px fill-white text-white" />
           </span>
         </span>
-        {video.durationSeconds > 0 ? (
-          <span className="absolute bottom-1 right-1 rounded bg-black/80 px-1 py-0.5 font-mono text-[10px] font-semibold text-white">
-            {formatDuration(video.durationSeconds)}
-          </span>
-        ) : null}
       </div>
 
       <div className="min-w-0 py-0.5">

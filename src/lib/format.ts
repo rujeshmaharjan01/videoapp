@@ -3,7 +3,7 @@ export function formatBytes(bytes: number | string | bigint | null | undefined) 
     return "Unknown";
   }
 
-  const value = typeof bytes === "bigint" ? Number(bytes) : Number(bytes);
+  const value = Number(bytes);
 
   if (!Number.isFinite(value) || value <= 0) {
     return "0 B";

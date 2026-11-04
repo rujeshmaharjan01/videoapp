@@ -15,8 +15,7 @@ function toPublicVideo(record: VideoModel): Video {
     description: record.description ?? "",
     category: tags[0] ?? "uncategorized",
     tags,
-    durationSeconds: 0,
-    views: 0,
+    views: record.views,
     createdAt: record.createdAt.toISOString(),
     uploader: "VideoApp Studio",
     gradient: ["#1e1b4b", "#7f1d1d"],
@@ -35,17 +34,19 @@ export type PublicVideoFilters = {
   query?: string;
   tag?: string;
   page?: number;
+  sort?: "new" | "views";
 };
 
-// No view counter exists yet, so every listing is newest-first.
-// shortcut: "most viewed" ordering, add a views column when needed.
 export async function listPublicVideos(filters: PublicVideoFilters) {
   const search = filters.query?.trim() ?? "";
-  const page = Math.max(filters.page ?? 1, 1);
+  const requestedPage = Math.max(filters.page ?? 1, 1);
 
   const where = {
     visibility: "PUBLIC" as const,
-    ...(filters.tag ? { tags: { has: filters.tag } } : {}),
+    status: "READY" as const,
+    ...(filters.tag
+      ? { tags: { has: filters.tag.trim().toLowerCase() } }
+      : {}),
     ...(search
       ? {
           OR: [
@@ -57,23 +58,27 @@ export async function listPublicVideos(filters: PublicVideoFilters) {
       : {}),
   };
 
-  const [total, records] = await Promise.all([
-    prisma.video.count({ where }),
-    prisma.video.findMany({
-      where,
-      orderBy: { createdAt: "desc" },
-      skip: (page - 1) * VIDEOS_PER_PAGE,
-      take: VIDEOS_PER_PAGE,
-    }),
-  ]);
+  const orderBy =
+    filters.sort === "views"
+      ? [{ views: "desc" as const }, { createdAt: "desc" as const }]
+      : [{ createdAt: "desc" as const }];
 
+  const total = await prisma.video.count({ where });
   const totalPages = Math.max(1, Math.ceil(total / VIDEOS_PER_PAGE));
+  const page = Math.min(requestedPage, totalPages);
+
+  const records = await prisma.video.findMany({
+    where,
+    orderBy,
+    skip: (page - 1) * VIDEOS_PER_PAGE,
+    take: VIDEOS_PER_PAGE,
+  });
 
   return {
     items: records.map(toPublicVideo),
     total,
     totalPages,
-    page: Math.min(page, totalPages),
+    page,
     perPage: VIDEOS_PER_PAGE,
   };
 }
@@ -83,7 +88,7 @@ export async function getPublicVideo(id: string): Promise<Video | undefined> {
     where: { streamtapeId: id },
   });
 
-  if (!record || record.visibility === "PRIVATE") {
+  if (!record || record.visibility === "PRIVATE" || record.status !== "READY") {
     return undefined;
   }
 
@@ -95,19 +100,82 @@ export async function getRelatedVideos(
   video: Video,
   limit = 8,
 ): Promise<Video[]> {
-  const records = await prisma.video.findMany({
-    where: { visibility: "PUBLIC", streamtapeId: { not: video.id } },
-    orderBy: { createdAt: "desc" },
-    take: limit,
+  const where = {
+    visibility: "PUBLIC" as const,
+    status: "READY" as const,
+    streamtapeId: { not: video.id },
+  };
+
+  const [matching, recent] = await Promise.all([
+    video.tags.length
+      ? prisma.video.findMany({
+          where: { ...where, tags: { hasSome: video.tags } },
+          orderBy: { createdAt: "desc" },
+          take: limit,
+        })
+      : [],
+    prisma.video.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      take: limit,
+    }),
+  ]);
+
+  const seen = new Set(matching.map((record) => record.id));
+
+  return [...matching, ...recent.filter((record) => !seen.has(record.id))]
+    .slice(0, limit)
+    .map(toPublicVideo);
+}
+
+function visitorHash(headers: Headers): string {
+  const ip = headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
+  const ua = headers.get("user-agent") ?? "unknown";
+  let hash = 0;
+  for (const ch of ip + "|" + ua) {
+    hash = ((hash << 5) - hash + ch.charCodeAt(0)) | 0;
+  }
+  return Math.abs(hash).toString(36);
+}
+
+function bucketKey(): string {
+  const now = Date.now();
+  return String(Math.floor(now / (4 * 3600 * 1000))); // 4-hour buckets
+}
+
+export async function recordView(id: string, headers: Headers): Promise<boolean> {
+  const video = await prisma.video.findUnique({
+    where: { streamtapeId: id },
+    select: { id: true, visibility: true, status: true },
   });
 
-  const matching = video.tags.length
-    ? records.filter((record) =>
-        (record.tags ?? []).some((tag) => video.tags.includes(tag)),
-      )
-    : [];
+  if (!video || video.visibility === "PRIVATE" || video.status !== "READY") {
+    return false;
+  }
 
-  return [...matching, ...records.filter((r) => !matching.includes(r))].map(
-    toPublicVideo,
-  );
+  const vHash = visitorHash(headers);
+  const bucket = bucketKey();
+
+  try {
+    await prisma.videoView.create({
+      data: {
+        videoId: video.id,
+        visitorHash: vHash,
+        bucket,
+      },
+    });
+
+    await prisma.video.update({
+      where: { id: video.id },
+      data: { views: { increment: 1 } },
+    });
+
+    return true;
+  } catch (e: unknown) {
+    const err = e as { code?: string };
+    if (err.code === "P2002") {
+      return false;
+    }
+    throw e;
+  }
 }

@@ -37,37 +37,9 @@ export type StreamTapeFileInfo = {
   status: number;
 };
 
-export type StreamTapeAccountInfo = {
-  apiid: string;
-  email: string;
-  signup_at: string;
-};
-
 export type StreamTapeUploadUrl = {
   url: string;
   valid_until: string;
-};
-
-export type StreamTapeUploadResult = {
-  url?: string;
-  sha256?: string;
-  name?: string;
-  size?: string;
-  content_type?: string;
-  id?: string;
-};
-
-export type StreamTapeRemoteUpload = {
-  id: string;
-  remoteurl: string;
-  status: string;
-  bytes_loaded: number | null;
-  bytes_total: number | null;
-  folderid: string;
-  added: string;
-  last_update: string;
-  extid: string | false;
-  url: string | false;
 };
 
 export class StreamTapeError extends Error {
@@ -146,7 +118,7 @@ function cached<T>(key: string, ttl: number, load: () => Promise<T>) {
   return value;
 }
 
-export function clearStreamTapeCache() {
+function clearStreamTapeCache() {
   responseCache.clear();
 }
 
@@ -213,12 +185,6 @@ async function request<T>(
   return payload.result;
 }
 
-export function getAccountInfo() {
-  return cached("account", 300_000, () =>
-    request<StreamTapeAccountInfo>("/account/info"),
-  );
-}
-
 export function listFolder(folder?: string, options?: { fresh?: boolean }) {
   if (options?.fresh) {
     clearStreamTapeCache();
@@ -269,49 +235,12 @@ export function getFileInfo(fileIds: string | string[]) {
   return request<Record<string, StreamTapeFileInfo>>("/file/info", { file });
 }
 
-export function renameFile(file: string, name: string) {
-  return mutate<boolean>("/file/rename", { file, name });
-}
-
 export function moveFile(file: string, folder: string) {
   return mutate<boolean>("/file/move", { file, folder });
 }
 
 export function deleteFile(file: string) {
   return mutate<boolean>("/file/delete", { file });
-}
-
-export function createFolder(name: string, parentId?: string) {
-  return mutate<{ folderid: string }>("/file/createfolder", {
-    name,
-    pid: parentId,
-  });
-}
-
-export function renameFolder(folder: string, name: string) {
-  return mutate<boolean>("/file/renamefolder", { folder, name });
-}
-
-export function deleteFolder(folder: string) {
-  return mutate<boolean>("/file/deletefolder", { folder });
-}
-
-export function getThumbnail(file: string) {
-  return request<string>("/file/getsplash", { file });
-}
-
-export function getDownloadTicket(file: string) {
-  return request<{ ticket: string; wait_time: number; valid_until: string }>(
-    "/file/dlticket",
-    { file },
-  );
-}
-
-export function getDownloadLink(file: string, ticket: string) {
-  return request<{ name: string; size: number; url: string }>("/file/dl", {
-    file,
-    ticket,
-  });
 }
 
 export function addRemoteUpload(options: {
@@ -326,46 +255,4 @@ export function addRemoteUpload(options: {
     headers: options.headers,
     name: options.name,
   });
-}
-
-export function checkRemoteUpload(id: string) {
-  return request<Record<string, StreamTapeRemoteUpload>>("/remotedl/status", {
-    id,
-  });
-}
-
-export function removeRemoteUpload(id: string) {
-  return mutate<boolean>("/remotedl/remove", { id });
-}
-
-export function getRunningConversions() {
-  return request<
-    Array<{
-      name: string;
-      folderid: string;
-      status: string;
-      progress: number;
-      retries: number;
-      link: string;
-      linkid: string;
-    }>
-  >("/file/runningconverts");
-}
-
-export function getFailedConversions() {
-  return getRunningConversionsWithPath("/file/failedconverts");
-}
-
-function getRunningConversionsWithPath(path: string) {
-  return request<
-    Array<{
-      name: string;
-      folderid: string;
-      status: string;
-      progress: number;
-      retries: number;
-      link: string;
-      linkid: string;
-    }>
-  >(path);
 }

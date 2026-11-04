@@ -42,3 +42,8 @@ export type Verification = Prisma.VerificationModel
  * 
  */
 export type Video = Prisma.VideoModel
+/**
+ * Model VideoView
+ * 
+ */
+export type VideoView = Prisma.VideoViewModel

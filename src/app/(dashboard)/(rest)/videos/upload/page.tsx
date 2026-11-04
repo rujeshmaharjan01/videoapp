@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 
 import { UploadForm } from "@/components/upload-form";
-import { requireAuth } from "@/lib/auth-utils";
 
 export const metadata: Metadata = {
   title: "Upload video",
@@ -9,8 +8,6 @@ export const metadata: Metadata = {
 };
 
 export default async function DashboardUploadPage() {
-  await requireAuth();
-
   return (
     <main className="mx-auto w-full max-w-5xl px-4 py-8">
       <UploadForm />

@@ -1,6 +1,5 @@
 "use client";
 
-import { useMutation } from "@tanstack/react-query";
 import {
   CheckCircle2,
   ExternalLink,
@@ -22,7 +21,6 @@ import {
 import { useUploadVideo } from "@/features/videos/hooks/use-upload-video";
 import type { VideoItem } from "@/features/videos/types";
 import { formatDuration } from "@/lib/catalog";
-import { useTRPC } from "@/trpc/client";
 import { cn } from "@/lib/utils";
 
 const MAX_SIZE_BYTES = 512 * 1024 * 1024;
@@ -35,7 +33,6 @@ function formatBytes(bytes: number): string {
 
 export function UploadForm() {
   const inputRef = useRef<HTMLInputElement>(null);
-  const trpc = useTRPC();
   const { upload, progress, isUploading } = useUploadVideo();
 
   const [file, setFile] = useState<File | null>(null);
@@ -46,9 +43,6 @@ export function UploadForm() {
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [created, setCreated] = useState<VideoItem | null>(null);
-  const [publishFailed, setPublishFailed] = useState(false);
-
-  const publish = useMutation(trpc.videos.update.mutationOptions());
 
   function acceptFile(nextFile: File) {
     setError(null);
@@ -108,7 +102,6 @@ export function UploadForm() {
     setTags("");
     setError(null);
     setCreated(null);
-    setPublishFailed(false);
     if (inputRef.current) inputRef.current.value = "";
   }
 
@@ -127,23 +120,12 @@ export function UploadForm() {
     setError(null);
 
     try {
-      const video = await upload(file, { 
+      const video = await upload(file, {
         title: title.trim(),
+        description: description.trim() || undefined,
         tags: tags.split(",").map(t => t.trim()).filter(Boolean)
       });
       setCreated(video);
-
-      // Publish the metadata the admin entered in the upload form.
-      try {
-        await publish.mutateAsync({
-          id: video.id,
-          description: description.trim() || null,
-          visibility: "PUBLIC",
-          tags: tags.split(",").map(t => t.trim()).filter(Boolean),
-        });
-      } catch {
-        setPublishFailed(true);
-      }
     } catch (uploadError) {
       setError(
         uploadError instanceof Error
@@ -160,13 +142,11 @@ export function UploadForm() {
           <CheckCircle2 className="size-8 text-emerald-400" />
         </span>
         <h1 className="text-xl font-bold tracking-tight">
-          {publishFailed ? "Video uploaded" : "Video published"}
+          Video published
         </h1>
         <p className="mt-2 max-w-sm text-sm leading-relaxed text-muted-foreground">
           <span className="font-medium text-foreground">{created.title}</span>{" "}
-          {publishFailed
-            ? "was uploaded but is still unlisted. Publish it from the Studio when you are ready."
-            : "is live. StreamTape may take a few minutes to finish converting it before playback starts."}
+          is live. StreamTape may take a few minutes to finish converting it before playback starts.
         </p>
         <div className="mt-7 flex flex-wrap items-center justify-center gap-2">
           <Link

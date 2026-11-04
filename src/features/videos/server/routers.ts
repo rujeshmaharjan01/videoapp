@@ -1,23 +1,19 @@
 import { PAGINATION } from "@/config/constants";
 import { prisma } from "@/lib/prisma";
+import { recordView } from "@/lib/uploads";
 import {
   addRemoteUpload,
-  checkRemoteUpload,
-  createFolder,
   createUploadUrl,
   deleteFile,
-  deleteFolder,
   getFileInfo,
   listFolder,
   moveFile,
-  removeRemoteUpload,
-  renameFile,
-  renameFolder,
   resolveFolderId,
   type StreamTapeFileInfo,
 } from "@/lib/streamtape";
-import { createTRPCRouter, protectedProcedure } from "@/trpc/init";
+import { createTRPCRouter, protectedProcedure, publicProcedure } from "@/trpc/init";
 import { TRPCError } from "@trpc/server";
+import { headers } from "next/headers";
 import { z } from "zod";
 
 const statusFromConvert = (value: string) => {
@@ -55,7 +51,9 @@ const fromStreamTapeTimestamp = (value: number) =>
 const tagsSchema = z
   .array(z.string().min(1).max(50))
   .transform((tags) => [
-    ...new Set(tags.map((tag) => tag.trim()).filter(Boolean)),
+    ...new Set(
+      tags.map((tag) => tag.trim().toLowerCase()).filter(Boolean),
+    ),
   ]);
 
 type VideoRecord = {
@@ -66,9 +64,7 @@ type VideoRecord = {
   streamtapeId: string;
   fileName: string;
   streamtapeUrl: string;
-  embedUrl: string;
   thumbnailUrl: string | null;
-  downloadUrl: string | null;
   folderId: string | null;
   size: bigint | null;
   status: "PROCESSING" | "READY" | "FAILED";
@@ -87,16 +83,12 @@ function serializeRecord(record: VideoRecord) {
     tags: record.tags ?? [],
     fileName: record.fileName,
     size: record.size ? Number(record.size) : 0,
-    link: record.streamtapeUrl,
-    embedUrl: record.embedUrl,
-    downloadUrl: record.downloadUrl,
     thumbnailUrl:
       record.thumbnailUrl ??
       (record.status === "READY" ? thumbnailUrl(record.streamtapeId) : null),
     folderId: record.folderId,
     status: record.status,
     visibility: record.visibility,
-    downloads: 0,
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
   };
@@ -113,16 +105,12 @@ function serializeInfo(info: StreamTapeFileInfo, record?: VideoRecord | null) {
     tags: record?.tags ?? [],
     fileName: info.name,
     size: record?.size ? Number(record.size) : info.size,
-    link: record?.streamtapeUrl ?? videoUrl(info.id, info.name),
-    embedUrl: record?.embedUrl ?? embedUrl(info.id),
-    downloadUrl: record?.downloadUrl ?? null,
     thumbnailUrl:
       record?.thumbnailUrl ??
       (info.converted ? thumbnailUrl(info.id) : null),
     folderId: record?.folderId ?? null,
     status,
     visibility: record?.visibility ?? ("UNLISTED" as const),
-    downloads: 0,
     createdAt: record?.createdAt.toISOString() ?? new Date().toISOString(),
     updatedAt: record?.updatedAt.toISOString() ?? null,
   };
@@ -198,6 +186,13 @@ async function ensureVideoRecord(userId: string, id: string) {
   });
 
   if (existing) {
+    if (existing.userId !== userId) {
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message: "Not your video.",
+      });
+    }
+
     return existing as VideoRecord;
   }
 
@@ -245,9 +240,10 @@ export const videosRouter = createTRPCRouter({
       }),
     )
     .query(async ({ ctx, input }) => {
+      const configuredFolder = await resolveFolderId();
       const folderId =
         input.folderId === undefined
-          ? process.env.STREAMTAPE_FOLDER_ID || null
+          ? configuredFolder ?? null
           : input.folderId || null;
 
       const search = input.search.trim();
@@ -354,6 +350,7 @@ export const videosRouter = createTRPCRouter({
       z.object({
         fileName: z.string().min(1).max(255),
         title: z.string().min(1).max(200).optional(),
+        description: z.string().max(5000).nullable().optional(),
         size: z.number().int().nonnegative().optional(),
         uploadResult: z.unknown().optional(),
         folderId: z.string().optional(),
@@ -365,7 +362,7 @@ export const videosRouter = createTRPCRouter({
         input.folderId === ""
           ? null
           : (input.folderId ??
-            process.env.STREAMTAPE_FOLDER_ID ??
+            (await resolveFolderId()) ??
             null);
 
       const upload = extractUploadResult(input.uploadResult);
@@ -402,12 +399,18 @@ export const videosRouter = createTRPCRouter({
         });
       }
 
+      const fileInfo = await getFileInfo(id);
+      const file = fileInfo[id];
+      const fileStatus: "PROCESSING" | "READY" | "FAILED" = file ? (file.converted ? "READY" : "PROCESSING") : "PROCESSING";
+
       const data = {
         fileName,
         streamtapeUrl: videoUrl(id, fileName),
         embedUrl: embedUrl(id),
         folderId,
         size: BigInt(Math.round(fileSize)),
+        status: fileStatus,
+        thumbnailUrl: fileStatus === "READY" ? thumbnailUrl(id) : null,
       };
 
       const record = existing
@@ -416,6 +419,7 @@ export const videosRouter = createTRPCRouter({
             data: {
               ...data,
               ...(input.title ? { title: input.title } : {}),
+              ...(input.description !== undefined ? { description: input.description } : {}),
               ...(input.tags ? { tags: input.tags } : {}),
             },
           })
@@ -423,9 +427,8 @@ export const videosRouter = createTRPCRouter({
             data: {
               ...data,
               title: input.title ?? titleFromFileName(fileName),
+              description: input.description ?? null,
               streamtapeId: id,
-              thumbnailUrl: null,
-              status: "PROCESSING",
               visibility: "PUBLIC",
               userId: ctx.auth.user.id,
               tags: input.tags ?? [],
@@ -465,33 +468,6 @@ export const videosRouter = createTRPCRouter({
       return serializeRecord(record as VideoRecord);
     }),
 
-  renameFile: protectedProcedure
-    .input(
-      z.object({
-        id: z.string().min(1),
-        name: z.string().min(1).max(255),
-      }),
-    )
-    .mutation(async ({ ctx, input }) => {
-      await renameFile(input.id, input.name);
-
-      const record = await prisma.video.findUnique({
-        where: { streamtapeId: input.id },
-      });
-
-      if (record && record.userId === ctx.auth.user.id) {
-        await prisma.video.update({
-          where: { streamtapeId: input.id },
-          data: {
-            fileName: input.name,
-            streamtapeUrl: videoUrl(input.id, input.name),
-          },
-        });
-      }
-
-      return { id: input.id, name: input.name };
-    }),
-
   move: protectedProcedure
     .input(
       z.object({
@@ -500,12 +476,16 @@ export const videosRouter = createTRPCRouter({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      await moveFile(input.id, input.folderId);
-
       await prisma.video.updateMany({
         where: { streamtapeId: input.id, userId: ctx.auth.user.id },
         data: { folderId: input.folderId },
       });
+
+      try {
+        await moveFile(input.id, input.folderId);
+      } catch {
+        // Best-effort: StreamTape may be slow; DB is already correct.
+      }
 
       return { id: input.id, folderId: input.folderId };
     }),
@@ -513,14 +493,19 @@ export const videosRouter = createTRPCRouter({
   remove: protectedProcedure
     .input(z.object({ id: z.string().min(1) }))
     .mutation(async ({ ctx, input }) => {
-      await deleteFile(input.id);
-
       await prisma.video.deleteMany({
         where: {
           streamtapeId: input.id,
           userId: ctx.auth.user.id,
         },
       });
+
+      try {
+        await deleteFile(input.id);
+      } catch {
+        // Best-effort: file may already be gone or StreamTape may be slow.
+        // The DB row is already removed so the user won't see a broken page.
+      }
 
       return { id: input.id };
     }),
@@ -560,13 +545,13 @@ export const videosRouter = createTRPCRouter({
         .optional(),
     )
     .mutation(async ({ ctx, input }) => {
-      const configuredFolder = process.env.STREAMTAPE_FOLDER_ID;
+      const configuredFolder = await resolveFolderId();
       const folderIds: Array<string | undefined> = [undefined];
       const requestedFolder = input?.folderId ?? undefined;
 
       if (requestedFolder) {
         folderIds.push(requestedFolder);
-      } else if (requestedFolder === undefined && configuredFolder) {
+      } else if (configuredFolder) {
         folderIds.push(configuredFolder);
       }
 
@@ -574,119 +559,78 @@ export const videosRouter = createTRPCRouter({
       let syncedCount = 0;
 
       for (const folderId of targets) {
-      let contents;
+        let contents;
 
-      try {
-        contents = await listFolder(folderId, { fresh: true });
-      } catch (error) {
-        if (folderId === undefined) {
-          throw error;
-        }
+        try {
+          contents = await listFolder(folderId, { fresh: true });
+        } catch (error) {
+          if (folderId === undefined) {
+            throw error;
+          }
 
-        continue;
-      }
-
-      for (const file of contents.files) {
-        const existing = await prisma.video.findUnique({
-          where: { streamtapeId: file.linkid },
-        });
-
-        if (existing && existing.userId !== ctx.auth.user.id) {
           continue;
         }
 
-        const fileStatus = statusFromConvert(file.convert);
-        const data = {
-          fileName: file.name,
-          streamtapeUrl: videoUrl(file.linkid, file.name),
-          embedUrl: embedUrl(file.linkid),
-          thumbnailUrl:
-            fileStatus === "READY" ? thumbnailUrl(file.linkid) : null,
-          folderId: folderId ?? null,
-          size: BigInt(file.size),
-          status: fileStatus,
-        };
+        // Batch upsert: fetch all existing records at once
+        const fileIds = contents.files.map((f) => f.linkid);
+        const existingRecords = await prisma.video.findMany({
+          where: { streamtapeId: { in: fileIds } },
+        });
+        const existingMap = new Map(existingRecords.map((r) => [r.streamtapeId, r]));
 
-        if (existing) {
-          await prisma.video.update({
-            where: { id: existing.id },
-            data,
-          });
-        } else {
-          await prisma.video.create({
-            data: {
-              ...data,
-              title: titleFromFileName(file.name),
-              streamtapeId: file.linkid,
-              visibility: "UNLISTED",
-              userId: ctx.auth.user.id,
-              createdAt: fromStreamTapeTimestamp(file.created_at),
-            },
-          });
+        for (const file of contents.files) {
+          const existing = existingMap.get(file.linkid);
+
+          if (existing && existing.userId !== ctx.auth.user.id) {
+            continue;
+          }
+
+          const fileStatus = statusFromConvert(file.convert);
+          const data = {
+            fileName: file.name,
+            streamtapeUrl: videoUrl(file.linkid, file.name),
+            embedUrl: embedUrl(file.linkid),
+            thumbnailUrl:
+              fileStatus === "READY" ? thumbnailUrl(file.linkid) : null,
+            folderId: folderId ?? null,
+            size: BigInt(file.size),
+            status: fileStatus,
+          };
+
+          if (existing) {
+            await prisma.video.update({
+              where: { id: existing.id },
+              data,
+            });
+          } else {
+            await prisma.video.create({
+              data: {
+                ...data,
+                title: titleFromFileName(file.name),
+                streamtapeId: file.linkid,
+                visibility: "UNLISTED",
+                userId: ctx.auth.user.id,
+                createdAt: fromStreamTapeTimestamp(file.created_at),
+              },
+            });
+          }
+
+          syncedCount += 1;
         }
-
-        syncedCount += 1;
       }
-    }
 
-    return {
-      syncedCount,
-      syncedAt: new Date().toISOString(),
-    };
-  }),
-
-  getFoldersAll: protectedProcedure.query(async () => {
-    const root = await listFolder();
-    const nested = await Promise.all(
-      root.folders.map(async (folder) => {
-        try {
-          const contents = await listFolder(folder.id);
-          return contents.folders;
-        } catch {
-          return [];
-        }
-      }),
-    );
-
-    const folders = [...root.folders, ...nested.flat()];
-    const unique = new Map(folders.map((folder) => [folder.id, folder]));
-
-    return [...unique.values()];
-  }),
-
-  createFolder: protectedProcedure
-    .input(
-      z.object({
-        name: z.string().min(1).max(200),
-        parentId: z.string().optional(),
-      }),
-    )
-    .mutation(async ({ input }) => {
-      return createFolder(input.name, input.parentId);
+      return {
+        syncedCount,
+        syncedAt: new Date().toISOString(),
+      };
     }),
 
-  renameFolder: protectedProcedure
-    .input(
-      z.object({
-        folderId: z.string().min(1),
-        name: z.string().min(1).max(200),
-      }),
-    )
+  recordView: publicProcedure
+    .input(z.object({ id: z.string().min(1) }))
     .mutation(async ({ input }) => {
-      await renameFolder(input.folderId, input.name);
-      return { id: input.folderId, name: input.name };
-    }),
-
-  deleteFolder: protectedProcedure
-    .input(z.object({ folderId: z.string().min(1) }))
-    .mutation(async ({ ctx, input }) => {
-      await deleteFolder(input.folderId);
-
-      await prisma.video.deleteMany({
-        where: { folderId: input.folderId, userId: ctx.auth.user.id },
-      });
-
-      return { id: input.folderId };
+      const h = await headers();
+      const counted = await recordView(input.id, h);
+      return { ok: true, counted };
     }),
 
   addRemoteUpload: protectedProcedure
@@ -703,19 +647,5 @@ export const videosRouter = createTRPCRouter({
         name: input.name,
         folder: input.folderId ?? (await resolveFolderId()),
       });
-    }),
-
-  remoteUploadStatus: protectedProcedure
-    .input(z.object({ id: z.string().min(1) }))
-    .query(async ({ input }) => {
-      const result = await checkRemoteUpload(input.id);
-      return result[input.id] ?? null;
-    }),
-
-  removeRemoteUpload: protectedProcedure
-    .input(z.object({ id: z.string().min(1) }))
-    .mutation(async ({ input }) => {
-      await removeRemoteUpload(input.id);
-      return { id: input.id };
     }),
 });

@@ -36,16 +36,12 @@ export function prefetch(queryOptions: { queryKey: readonly unknown[] }) {
     (queryType as { type?: string }).type === "infinite";
 
   if (isInfinite) {
-    return queryClient.prefetchInfiniteQuery(
+    return queryClient.infiniteQuery(
       queryOptions as Parameters<typeof queryClient.prefetchInfiniteQuery>[0],
     );
   }
 
-  return queryClient.prefetchQuery(
+  return queryClient.query(
     queryOptions as Parameters<typeof queryClient.prefetchQuery>[0],
   );
-}
-
-export async function getCaller() {
-  return appRouter.createCaller(await createTRPCContext());
 }

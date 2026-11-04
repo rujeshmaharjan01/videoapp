@@ -69,31 +69,6 @@ export const useUpdateVideo = () => {
 };
 
 /**
- * Rename the actual file on StreamTape.
- */
-export const useRenameVideoFile = () => {
-  const trpc = useTRPC();
-  const queryClient = useQueryClient();
-
-  return useMutation(
-    trpc.videos.renameFile.mutationOptions({
-      onSuccess: (result) => {
-        toast.success("File renamed", result.name);
-        queryClient.invalidateQueries({
-          queryKey: [["videos", "getMany"]],
-        });
-        queryClient.invalidateQueries(
-          trpc.videos.getOne.queryOptions({ id: result.id }),
-        );
-      },
-      onError: (error) => {
-        toast.error("Could not rename file", error.message);
-      },
-    }),
-  );
-};
-
-/**
  * Delete a video from StreamTape and the local database.
  */
 export const useRemoveVideo = () => {

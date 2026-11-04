@@ -13,7 +13,7 @@ function SearchFallback() {
 
 export function SiteHeader() {
   return (
-    <header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+    <header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/80">
       <div className="mx-auto flex h-16 max-w-[1600px] items-center gap-3 px-4">
         <Link href="/" className="flex shrink-0 items-center gap-2">
           <span className="grid size-8 place-items-center rounded-md bg-primary text-primary-foreground shadow-[0_0_22px_rgba(239,68,68,0.35)]">

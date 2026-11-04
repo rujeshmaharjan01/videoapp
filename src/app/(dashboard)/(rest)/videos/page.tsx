@@ -11,7 +11,6 @@ import {
   prefetchVideoStats,
   prefetchVideos,
 } from "@/features/videos/server/prefetch";
-import { requireAuth } from "@/lib/auth-utils";
 import { HydrateClient } from "@/trpc/server";
 import type { SearchParams } from "nuqs/server";
 import { Suspense } from "react";
@@ -22,8 +21,6 @@ type Props = {
 };
 
 const Page = async ({ searchParams }: Props) => {
-  await requireAuth();
-
   const params = await videosParamsLoader(searchParams);
   await Promise.all([
     prefetchVideos(toVideosQueryInput(params)),

@@ -23,10 +23,3 @@ export const prefetchVideoStats = () => {
 export const prefetchVideoFolders = () => {
   return prefetch(trpc.videos.getFolders.queryOptions());
 };
-
-/**
- * Prefetch a single video.
- */
-export const prefetchVideo = (id: string) => {
-  return prefetch(trpc.videos.getOne.queryOptions({ id }));
-};

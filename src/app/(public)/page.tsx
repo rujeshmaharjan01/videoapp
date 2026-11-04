@@ -36,7 +36,7 @@ export default async function Home({
   const pageParam = Number.parseInt(first(params.page) ?? "1", 10);
   const page = Number.isFinite(pageParam) && pageParam > 0 ? pageParam : 1;
 
-  const result = await listPublicVideos({ query, tag, page });
+  const result = await listPublicVideos({ query, tag, page, sort });
 
   const heading = query
     ? `Results for “${query}”`

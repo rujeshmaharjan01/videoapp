@@ -75,6 +75,7 @@ export const useUploadVideo = () => {
     file: File,
     options?: {
       title?: string;
+      description?: string;
       tags?: string[];
       folderId?: string;
       onSuccess?: (video: VideoItem) => void;
@@ -99,6 +100,7 @@ export const useUploadVideo = () => {
       const video = await confirmUpload.mutateAsync({
         fileName: file.name,
         title: options?.title,
+        description: options?.description,
         size: file.size,
         folderId: target.folderId ?? undefined,
         tags: options?.tags,
@@ -129,7 +131,5 @@ export const useUploadVideo = () => {
     upload,
     progress,
     isUploading,
-    createUpload,
-    confirmUpload,
   };
 };

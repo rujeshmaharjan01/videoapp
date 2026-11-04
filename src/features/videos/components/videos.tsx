@@ -41,7 +41,6 @@ import {
   PencilIcon,
   RefreshCwIcon,
   UploadIcon,
-  VideoIcon,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
@@ -820,13 +819,5 @@ function RemoteUploadDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  );
-}
-
-export function VideoPlaceholder() {
-  return (
-    <div className="flex aspect-video items-center justify-center rounded-lg border bg-muted">
-      <VideoIcon className="size-10 text-muted-foreground" />
-    </div>
   );
 }

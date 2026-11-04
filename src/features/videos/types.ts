@@ -9,14 +9,10 @@ export type VideoItem = {
   tags: string[];
   fileName: string;
   size: number;
-  link: string;
-  embedUrl: string;
-  downloadUrl: string | null;
   thumbnailUrl: string | null;
   folderId: string | null;
   status: VideoStatus;
   visibility: VideoVisibility;
-  downloads: number;
   createdAt: string;
   updatedAt: string | null;
 };
@@ -24,14 +20,4 @@ export type VideoItem = {
 export type VideoFolder = {
   id: string;
   name: string;
-};
-
-export type VideoListResult = {
-  items: VideoItem[];
-  page: number;
-  pageSize: number;
-  totalCount: number;
-  totalPages: number;
-  hasNextPage: boolean;
-  hasPreviousPage: boolean;
 };

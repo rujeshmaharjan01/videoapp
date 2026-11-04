@@ -3,7 +3,6 @@ import Link from "next/link";
 
 import { CategoryIcon } from "@/components/category-icon";
 import {
-  formatDuration,
   formatViews,
   getCategoryName,
   timeAgo,
@@ -49,12 +48,6 @@ export function VideoCard({
             <Play className="size-5 translate-x-0.5 fill-white text-white" />
           </span>
         </span>
-
-        {video.durationSeconds > 0 ? (
-          <span className="absolute bottom-2 right-2 rounded bg-black/80 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-white">
-            {formatDuration(video.durationSeconds)}
-          </span>
-        ) : null}
       </div>
 
       <div className="mt-2.5 min-w-0 space-y-1">

@@ -55,7 +55,8 @@ export const ModelName = {
   Session: 'Session',
   Account: 'Account',
   Verification: 'Verification',
-  Video: 'Video'
+  Video: 'Video',
+  VideoView: 'VideoView'
 } as const
 
 export type ModelName = (typeof ModelName)[keyof typeof ModelName]
@@ -147,12 +148,24 @@ export const VideoScalarFieldEnum = {
   size: 'size',
   status: 'status',
   visibility: 'visibility',
+  views: 'views',
   createdAt: 'createdAt',
   updatedAt: 'updatedAt',
   userId: 'userId'
 } as const
 
 export type VideoScalarFieldEnum = (typeof VideoScalarFieldEnum)[keyof typeof VideoScalarFieldEnum]
+
+
+export const VideoViewScalarFieldEnum = {
+  id: 'id',
+  videoId: 'videoId',
+  visitorHash: 'visitorHash',
+  bucket: 'bucket',
+  createdAt: 'createdAt'
+} as const
+
+export type VideoViewScalarFieldEnum = (typeof VideoViewScalarFieldEnum)[keyof typeof VideoViewScalarFieldEnum]
 
 
 export const SortOrder = {

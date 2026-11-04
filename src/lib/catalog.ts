@@ -8,7 +8,6 @@ export type Video = {
   description: string;
   category: string;
   tags: string[];
-  durationSeconds: number;
   views: number;
   createdAt: string;
   uploader: string;
